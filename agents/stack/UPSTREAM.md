@@ -1,11 +1,12 @@
 # Upstream sources
 
-Both pinned snapshots use the MIT license. The snapshots retain their original license and copyright notices and are kept for reference.
+All pinned snapshots use the MIT license. The snapshots retain their original license and copyright notices and are kept for reference.
 
 | Repository | Pinned revision | License |
 |---|---|---|
 | [t3dotgg/tstack](https://github.com/t3dotgg/tstack) | `11e37a74d0a6868c121cd0910ab2b3bd9873b92a` | [MIT, Theo Browne](upstream/tstack/LICENSE) |
 | [backnotprop/pstack](https://github.com/backnotprop/pstack) | `0d2dc00df47d7686c94324cfe9c3444710d9f16d` | [MIT, Lauren Tan](upstream/pstack/LICENSE) |
+| [s0xDk/refactoring-ui-skill](https://github.com/s0xDk/refactoring-ui-skill) | `48872143abb0a8feb6d9bf58e222afbd800210b0` | [MIT, s13k](upstream/refactoring-ui/LICENSE) |
 
 ## Adopted and folded content
 
@@ -21,6 +22,7 @@ Both pinned snapshots use the MIT license. The snapshots retain their original l
 | [pstack unslop](upstream/pstack/skills/unslop/SKILL.md) | Rules 3–33 for direct, specific, readable prose. | Condense into `ste` with the technical-writing rules. |
 | [pstack interrogate](upstream/pstack/skills/interrogate/SKILL.md) | Give concrete proof for review findings. | The adversarial-reviewer uses Orca and requires a run or definitive code path for a confirmed finding. |
 | [pstack arena](upstream/pstack/skills/arena/SKILL.md) | An independent perspective for a wide review. | A coordinator-arranged second-vendor review takes the place of the upstream fan-out. |
+| [refactoring-ui-skill](upstream/refactoring-ui/SKILL.md) with its `references/` and `assets/tokens.css` | All scales, the procedure, the hierarchy rules, the nine hard rules, the references, and the token file, unchanged. The design rules come from the book *Refactoring UI* by Adam Wathan and Steve Schoger. | A `Use in this stack` section: the project's design system takes precedence, edits stay in scope, visual changes need screenshot and contrast proof, review findings cite a rule and a measured value, and reports use `ste`. The skill is installed for Claude and Codex. The implementer, adversarial-reviewer, manual-tester, and the `pr-review-master` web check use it. |
 
 `ship-pr` is a local, user-invoked continuation. It uses the adapted PR filing, comment, and watching skills after cross-vendor approval.
 

@@ -58,6 +58,7 @@ Replace `<...>` with the repo's commands and skills from the Project settings.
 ```text
 - Run typecheck, lint and tests for the changed app: <commands>.
 - Run the app against a local stack, open the changed pages in Orca's browser, drive the changed flow, and take a screenshot per acceptance criterion.
+- Check the changed screens against the hard rules in `~/.agents/stack/skills/refactoring-ui/SKILL.md` and the symptoms in its `references/diagnose.md`, in light and dark mode. Report each violation with the rule, the element, and the measured value.
 ```
 
 ### android

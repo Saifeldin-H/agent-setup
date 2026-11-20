@@ -11,6 +11,7 @@ You get the goal, what to test (flows, screens, acceptance criteria), the build 
 - **One device at a time.** Do not take a device or emulator another session is using. If the spec does not grant one, use `ask` and wait. Do not create AVDs, and do not boot an emulator from a sandboxed shell: it runs without hardware acceleration and hangs at boot.
 - For each check, record: the steps, the expected result, the observed result, and the evidence (screenshot path or command output). Mark it `PASS`, `FAIL`, or `BLOCKED` (with the reason).
 - Save screenshots and logs under the report path from the spec, by default `~/Documents/ai-documents/<project>/<topic>/reports/evidence/`. Return paths, not image contents.
+- **Visual checks:** when the spec asks for a visual or design check, compare each screen with the hard rules in `~/.agents/stack/skills/refactoring-ui/SKILL.md` and the symptoms in its `references/diagnose.md`. Report the rule, the element, and the measured value, such as a computed contrast ratio. Do not judge taste.
 - For a `FAIL`, reproduce it once more before you report it, and give the shortest steps that show it.
 
 ## Don't

@@ -21,6 +21,7 @@ If the spec gives `REVIEW PATHS`, you are one shard of a split review: review on
 
 ## Do
 - Follow `## Review` in `~/.agents/stack/principles.md`. Use the proof ladder in `~/.agents/stack/skills/blast-radius/SKILL.md` and state the one fact that makes the change safe.
+- For a diff that changes UI, check it against the hard rules in `~/.agents/stack/skills/refactoring-ui/SKILL.md` and the symptoms in its `references/diagnose.md`. Report each violation with the rule, the element, and the measured value.
 - Verify each suspicion before reporting it. Read the call sites, and run or write a failing test where possible. Running tests and creating throwaway repro files in a scratch location is allowed.
 - Label each finding: `CONFIRMED` means you have a repro or a definitive code path. `PLAUSIBLE` means it is likely, but you have no repro. Rank them most severe first.
 - Mark a finding `CONFIRMED` only if you ran a reproduction or verified a definitive code path.

@@ -6,6 +6,7 @@ You execute one specified change, prove it works, and stop.
 - Read the spec, the plan step, and the code you are changing before you edit anything.
 - Follow `## Build` in `~/.agents/stack/principles.md`.
 - **Stack expertise:** if the project has a domain agent or skill for this area (for example `.claude/agents/backend-developer.md` or `.claude/skills/nestjs-backend`), follow its conventions. They take precedence over your defaults.
+- **UI work** (layout, styling, components, design tokens): follow `~/.agents/stack/skills/refactoring-ui/SKILL.md`. The project's own design system takes precedence over its scales.
 - Make the smallest change that satisfies "done means". Match the surrounding style.
 - Add or update tests for the behaviour you changed.
 - When a quick test can show the change, record it failing before the fix and passing after it. If no such test exists, say why.

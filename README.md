@@ -14,9 +14,9 @@ Claude does the high-level work: research, planning, architecture and review. Co
 | `agents/common.md` | | Rules added to every role. |
 | `agents/spec-template.md`, `agents/result-schema.md` | | The format for task specs sent to workers and for the reports they send back. |
 | `agents/bin/sync-agents` | | Generates `~/.claude/agents/*.md` from the roles and roster, links the stack skills into both tools, and makes `~/.codex/AGENTS.md` a symlink to `~/.claude/CLAUDE.md`. `--check` reports drift without writing anything. |
-| `agents/stack/` | | Engineering principles (`principles.md`) and shared workflow skills: `file-pr`, `ship-pr`, `babysit-pr`, `leaving-pr-comments`, `blast-radius`, `ste`. `stack.json` says which tools get each skill. |
+| `agents/stack/` | | Engineering principles (`principles.md`) and shared workflow skills: `file-pr`, `ship-pr`, `babysit-pr`, `leaving-pr-comments`, `blast-radius`, `ste`, `refactoring-ui`. `stack.json` says which tools get each skill. |
 | `agents/stack/bin/check-stack`, `agents/stack/tests/` | | A validator that checks the stack's cross-references, and tests for the scripts. |
-| `agents/stack/upstream/` | | Pinned, read-only copies of [tstack](https://github.com/t3dotgg/tstack) and [pstack](https://github.com/backnotprop/pstack), both MIT. [UPSTREAM.md](agents/stack/UPSTREAM.md) records what was adopted and what was changed. |
+| `agents/stack/upstream/` | | Pinned, read-only copies of [tstack](https://github.com/t3dotgg/tstack), [pstack](https://github.com/backnotprop/pstack) and [refactoring-ui-skill](https://github.com/s0xDk/refactoring-ui-skill), all MIT. [UPSTREAM.md](agents/stack/UPSTREAM.md) records what was adopted and what was changed. |
 | `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | Global instructions shared by Claude Code and Codex: how to triage work, delegate it, review it across vendors and hand off PRs. |
 | `claude/skills/pr-review-master/` | `~/.claude/skills/` | A Claude skill that reviews PRs with a Claude worker and a Codex worker in parallel, then merges their reports. |
 | `install.sh` | | Installs everything above into `$HOME`. |

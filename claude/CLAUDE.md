@@ -78,6 +78,7 @@ The canonical stack lives in `~/.agents/stack/`.
 | `skills/file-pr/SKILL.md` | File a PR when authorized. |
 | `skills/babysit-pr/SKILL.md` | The assigned PR owner's checks and follow-up. |
 | `skills/{leaving-pr-comments,blast-radius,ste}/SKILL.md` | GitHub comments, change risk, and report writing. |
+| `skills/refactoring-ui/SKILL.md` | UI design rules: fixed scales, hierarchy, contrast, and a symptom-to-fix table. Used by implementers, testers, and reviewers for UI work. |
 
 ### When you are a dispatched worker (Claude or Codex)
 

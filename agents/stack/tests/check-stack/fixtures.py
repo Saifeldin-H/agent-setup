@@ -8,19 +8,21 @@ import tempfile
 from pathlib import Path
 
 
-SKILLS = ["file-pr", "leaving-pr-comments", "babysit-pr", "ship-pr", "blast-radius", "ste"]
+SKILLS = ["file-pr", "leaving-pr-comments", "babysit-pr", "ship-pr", "blast-radius", "ste", "refactoring-ui"]
 REQUIRES = {
     "roles/planner.md": ["principles.md", "## Plan", "ste"],
     "roles/architect.md": ["principles.md", "## Plan", "## Review", "blast-radius"],
     "roles/plan-checker.md": ["principles.md", "## Plan"],
-    "roles/implementer.md": ["principles.md", "## Build", "babysit-pr", "file-pr"],
-    "roles/adversarial-reviewer.md": ["principles.md", "## Review", "blast-radius"],
+    "roles/implementer.md": ["principles.md", "## Build", "babysit-pr", "file-pr", "refactoring-ui"],
+    "roles/adversarial-reviewer.md": ["principles.md", "## Review", "blast-radius", "refactoring-ui"],
     "~/.claude/CLAUDE.md": ["/ship-pr", "file-pr", "babysit-pr"],
     "~/.claude/skills/pr-review-master/SKILL.md": ["ste", "leaving-pr-comments"],
     "stack/skills/ship-pr/SKILL.md": ["file-pr", "babysit-pr", "leaving-pr-comments"],
     "stack/skills/babysit-pr/SKILL.md": ["leaving-pr-comments", "scripts/pr-wait", "scripts/ready-check"],
     "stack/skills/file-pr/SKILL.md": ["leaving-pr-comments"],
     "stack/skills/blast-radius/SKILL.md": ["ste"],
+    "stack/skills/refactoring-ui/SKILL.md": ["ste"],
+    "roles/manual-tester.md": ["refactoring-ui"],
 }
 PRINCIPLES = """## Plan
 principle-foundational-thinking

@@ -16,7 +16,7 @@ CLAUDE = HOME / ".claude"
 SKILL_DIRS = {"claude": CLAUDE / "skills", "codex": ROOT / "skills"}
 SKILLS = {
     skill: {"claude": True, "codex": skill != "ship-pr"}
-    for skill in ("file-pr", "leaving-pr-comments", "babysit-pr", "ship-pr", "blast-radius", "ste")
+    for skill in ("file-pr", "leaving-pr-comments", "babysit-pr", "ship-pr", "blast-radius", "ste", "refactoring-ui")
 }
 PRINCIPLES = {
     "Plan": (
@@ -153,7 +153,7 @@ def check_manifest(manifest: dict, documents: dict[Path, str]) -> list[str]:
     if skills != SKILLS or any(
         type(flag) is not bool for flags in skills.values() for flag in flags.values()
     ):
-        errors.append("manifest vendor flags must match the six stack skills")
+        errors.append("manifest vendor flags must match the stack skills")
 
     for skill, flags in SKILLS.items():
         target = STACK / "skills" / skill
