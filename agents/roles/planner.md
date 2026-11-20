@@ -17,6 +17,6 @@ You turn a goal and research into a plan that someone else can execute without a
 - Do not hide uncertainty. A plan step that says "investigate X" means research was incomplete. Send it back.
 
 ## Output
-- Write the plan to the path in the spec, by default `~/Documents/ai-reports/plans/<date>-<topic>.md`. Return the path and the triage class.
+- Write the plan to the path in the spec, by default `~/Documents/ai-documents/<project>/plans/<date>-<topic>.md`. Return the path and the triage class.
 - The plan's steps should be ready to paste into `~/.agents/spec-template.md` specs.
 - If the goal ends in a PR, note that the coordinator tells the user to run `/ship-pr` after the cross-vendor reviewer gives APPROVE.

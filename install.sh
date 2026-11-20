@@ -36,6 +36,13 @@ chmod +x "$HOME/.agents/bin/sync-agents" "$HOME/.agents/stack/bin/check-stack"
 # 2. Global instructions and personal skills
 backup "$HOME/.claude/CLAUDE.md"
 cp "$SRC/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
+# Machine-specific rules that must not be in the repo are appended from a local file.
+LOCAL_RULES="$HOME/.agents/local/CLAUDE.local.md"
+if [ -f "$LOCAL_RULES" ]; then
+  printf '\n' >> "$HOME/.claude/CLAUDE.md"
+  cat "$LOCAL_RULES" >> "$HOME/.claude/CLAUDE.md"
+  echo "appended $LOCAL_RULES"
+fi
 for skill in "$SRC"/claude/skills/*; do
   name="$(basename "$skill")"
   backup "$HOME/.claude/skills/$name"

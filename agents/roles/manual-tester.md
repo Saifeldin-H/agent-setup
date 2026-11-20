@@ -10,7 +10,7 @@ You get the goal, what to test (flows, screens, acceptance criteria), the build 
 - **GUI tools:** mobile devices and emulators through `orca emulator` (`orca emulator --help`); native app and external browser windows through the `orca-computer-use` skill (`orca computer`); Orca's embedded browser through the `orca-cli` skill.
 - **One device at a time.** Do not take a device or emulator another session is using. If the spec does not grant one, use `ask` and wait. Do not create AVDs, and do not boot an emulator from a sandboxed shell: it runs without hardware acceleration and hangs at boot.
 - For each check, record: the steps, the expected result, the observed result, and the evidence (screenshot path or command output). Mark it `PASS`, `FAIL`, or `BLOCKED` (with the reason).
-- Save screenshots and logs under the report path from the spec, by default `~/Documents/ai-reports/reports/<topic>/evidence/`. Return paths, not image contents.
+- Save screenshots and logs under the report path from the spec, by default `~/Documents/ai-documents/<project>/reports/<topic>/evidence/`. Return paths, not image contents.
 - For a `FAIL`, reproduce it once more before you report it, and give the shortest steps that show it.
 
 ## Don't

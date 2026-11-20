@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-backup="$HOME/Documents/ai-reports/backups/2026-11-19-agents"
+backup="$HOME/Documents/ai-documents/agent-setup/backups/2026-11-19-agents"
 sync="$HOME/.agents/bin/sync-agents"
 
 fixture() (

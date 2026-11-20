@@ -4,11 +4,13 @@ This file is shared by Claude Code (`~/.claude/CLAUDE.md`) and Codex (`~/.codex/
 
 ## Where to write AI-generated documents
 
-Keep these out of the repo. Create the directory if it doesn't exist.
+Keep these out of the repo. Create the directory if it doesn't exist. Everything goes under `~/Documents/ai-documents/<project>/`.
 
-- **Work logs** go in `~/documents/ai-reports/worklogs/`
-- **General reports** go in `~/documents/ai-reports/reports/<topic>/`
-- **Plans** go in `~/documents/ai-reports/plans/`
+`<project>` is the folder name of the main checkout, even when you work in a worktree: the parent directory of `git rev-parse --path-format=absolute --git-common-dir` (for example `wallet-monorepo` or `agent-setup`). Use `general` for work that doesn't belong to a repository.
+
+- **Work logs** go in `~/Documents/ai-documents/<project>/worklogs/`
+- **General reports** go in `~/Documents/ai-documents/<project>/reports/<topic>/`
+- **Plans** go in `~/Documents/ai-documents/<project>/plans/`
 
 ## Agent roles & orchestration
 

@@ -40,7 +40,7 @@ Delegated work runs as Orca workers. The full rules are in [claude/CLAUDE.md](cl
 The script:
 
 1. Copies `agents/` into `~/.agents/`. It leaves Orca's own `skills/` and `.orca-skill-digests/` alone.
-2. Copies `claude/CLAUDE.md` and the Claude skills into `~/.claude/`.
+2. Copies `claude/CLAUDE.md` and the Claude skills into `~/.claude/`. If `~/.agents/local/CLAUDE.local.md` exists, it appends that file to the installed `CLAUDE.md`. Put machine-specific rules there that must not be in the repo.
 3. Runs `sync-agents`, then `sync-agents --check`.
 
 Before overwriting anything, it moves the existing file to `~/.agent-stack-backup-<timestamp>/`.
@@ -64,4 +64,4 @@ agents/stack/tests/pr-wait/run.sh       # pr-wait script, against a fake gh
 agents/stack/tests/sync/run.sh          # sync-agents, in throwaway $HOME directories
 ```
 
-The `sync` tests need two things on your machine: an installed `~/.agents/bin/sync-agents`, and a reference backup at `~/Documents/ai-reports/backups/2026-11-19-agents`.
+The `sync` tests need two things on your machine: an installed `~/.agents/bin/sync-agents`, and a reference backup at `~/Documents/ai-documents/agent-setup/backups/2026-11-19-agents`.
