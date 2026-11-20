@@ -14,6 +14,10 @@ Keep these out of the repo. Create the directory if it doesn't exist. Everything
 - **General reports** go in `~/Documents/ai-documents/<project>/<topic>/reports/`, in a subfolder per ticket or review when there are several files
 - **Plans** go in `~/Documents/ai-documents/<project>/<topic>/plans/`
 
+## Diagrams
+
+Always draw diagrams in Mermaid, in a fenced `mermaid` code block. This applies to diagrams in chat, documents, plans, reports and PR descriptions. Do not draw diagrams in ASCII art or as images. Pick the Mermaid type that fits: `flowchart` for flows, `sequenceDiagram` for interactions, `stateDiagram-v2` for states, `erDiagram` for data models.
+
 ## Agent roles & orchestration
 
 Global role agents live in `~/.claude/agents/`. They are **generated**: edit the canonical files in `~/.agents/` (`roles/*.md`, `roster.json`, `common.md`), then run `~/.agents/bin/sync-agents`.
