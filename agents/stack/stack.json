@@ -1,0 +1,24 @@
+{
+  "_comment": "Keys in requires are paths relative to ~/.agents, except ~/.claude paths, which are absolute with ~ as the home directory.",
+  "skills": {
+    "file-pr": {"claude": true, "codex": true},
+    "leaving-pr-comments": {"claude": true, "codex": true},
+    "babysit-pr": {"claude": true, "codex": true},
+    "ship-pr": {"claude": true, "codex": false},
+    "blast-radius": {"claude": true, "codex": true},
+    "ste": {"claude": true, "codex": true}
+  },
+  "requires": {
+    "roles/planner.md": ["principles.md", "## Plan", "ste"],
+    "roles/architect.md": ["principles.md", "## Plan", "## Review", "blast-radius"],
+    "roles/plan-checker.md": ["principles.md", "## Plan"],
+    "roles/implementer.md": ["principles.md", "## Build", "babysit-pr", "file-pr"],
+    "roles/adversarial-reviewer.md": ["principles.md", "## Review", "blast-radius"],
+    "~/.claude/CLAUDE.md": ["/ship-pr", "file-pr", "babysit-pr"],
+    "~/.claude/skills/pr-review-master/SKILL.md": ["ste", "leaving-pr-comments"],
+    "stack/skills/ship-pr/SKILL.md": ["file-pr", "babysit-pr", "leaving-pr-comments"],
+    "stack/skills/babysit-pr/SKILL.md": ["leaving-pr-comments", "scripts/pr-wait", "scripts/ready-check"],
+    "stack/skills/file-pr/SKILL.md": ["leaving-pr-comments"],
+    "stack/skills/blast-radius/SKILL.md": ["ste"]
+  }
+}

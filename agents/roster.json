@@ -1,0 +1,206 @@
+{
+  "_comment": "Single source of truth for role -> vendor/model/effort. Edit here, then run ~/.agents/bin/sync-agents. Orca coordinators read this to pick worker-start --agent/--model/--effort. 'prefer' is the default vendor for the role; 'fallback' is used when the preferred vendor is unavailable or when cross-review requires the other vendor. Pass the 'orca' block's values to worker-start.",
+  "limits": {
+    "parallel_implementers": 4,
+    "parallel_workers": 8,
+    "nesting_depth": 2,
+    "review_fix_rounds": 2
+  },
+  "policy": {
+    "high_level": "claude",
+    "implementation": "codex",
+    "cross_review": "Every artifact is reviewed by the OTHER vendor from the one that wrote it. Claude plans -> Codex checks the plan. Codex implements -> Claude reviews the diff. Claude implements -> Codex reviews the diff. High-risk: both vendors review in parallel and both must pass.",
+    "risk_escalation": "For high-risk work use the role's 'highRisk' override when one is defined. High-risk pairing: Claude side runs claude-opus-5-5, Codex side runs gpt-6.2-astra, both at high effort.",
+    "watchers": "Text-only mechanical work (worker) runs on Codex gpt-6-luna. Hands-on GUI/device testing (manual-tester) and PR watchers (implementer with PR: own) run on Codex gpt-6.1-terra. Fixes a watcher pushes still get a delta review by the other vendor."
+  },
+  "models": {
+    "claude": {
+      "opus": {
+        "id": "claude-opus-5-5",
+        "use": "Most capable Claude model in use: planning, architecture (incl. high-risk), adversarial review (incl. high-risk, paired with gpt-6.2-astra)."
+      },
+      "sonnet": {
+        "id": "claude-sonnet-5-5",
+        "use": "Research, fallback implementation."
+      },
+      "haiku": {
+        "id": "claude-haiku-5-5",
+        "use": "Cheap mechanical fallback."
+      }
+    },
+    "codex": {
+      "astra": {
+        "id": "gpt-6.2-astra",
+        "use": "Most capable Codex model: high-risk implementation, architecture and review (paired with claude-opus-5-5), reviewing Claude-written code."
+      },
+      "sol": {
+        "id": "gpt-6.2-sol",
+        "use": "Go-to coding model: standard implementation and plan checks."
+      },
+      "luna": {
+        "id": "gpt-6-luna",
+        "use": "Fast/cheap: text-only mechanical bulk work (worker)."
+      },
+      "terra": {
+        "id": "gpt-6.1-terra",
+        "use": "Efficient, strong at visual understanding and computer use: manual-tester (devices, screenshots, GUI) and PR watchers (babysit-pr owner)."
+      }
+    }
+  },
+  "roles": {
+    "researcher": {
+      "description": "Fact-finder. Use proactively before planning or whenever a task needs facts gathered from code, docs, logs or the web: locating code paths, tracing behaviour, comparing options, reading external docs. Returns cited findings, never recommendations or edits.",
+      "prefer": "claude",
+      "fallback": "codex",
+      "claude": {
+        "model": "sonnet",
+        "orcaModel": "claude-sonnet-5-5",
+        "effort": "medium",
+        "readOnly": true
+      },
+      "codex": {
+        "model": "gpt-6.2-sol",
+        "effort": "medium",
+        "enabled": true
+      }
+    },
+    "planner": {
+      "description": "Turns a goal plus research into an ordered, testable implementation plan. Use proactively for any change touching more than one file or component, before implementation starts. Writes the plan to a file and returns its path.",
+      "prefer": "claude",
+      "fallback": "codex",
+      "claude": {
+        "model": "opus",
+        "orcaModel": "claude-opus-5-5",
+        "effort": "high",
+        "readOnly": false
+      },
+      "codex": {
+        "model": "gpt-6.2-astra",
+        "effort": "high",
+        "enabled": true
+      }
+    },
+    "architect": {
+      "description": "Design gatekeeper. Use proactively to challenge a plan before implementation when it touches schemas/migrations, auth, money, crypto/signing, infra, public APIs or cross-component boundaries. Returns APPROVE or REVISE with numbered required changes. Never edits code.",
+      "prefer": "claude",
+      "fallback": "codex",
+      "crossVendor": true,
+      "claude": {
+        "model": "opus",
+        "orcaModel": "claude-opus-5-5",
+        "effort": "high",
+        "readOnly": true
+      },
+      "codex": {
+        "model": "gpt-6.2-astra",
+        "effort": "high",
+        "enabled": true
+      }
+    },
+    "plan-checker": {
+      "description": "Cross-vendor plan check for standard-tier work: reads a plan written by the other vendor, verifies its assumptions against the code, and returns APPROVE or REVISE. Lighter than architect. Never edits code.",
+      "prefer": "codex",
+      "fallback": "claude",
+      "crossVendor": true,
+      "claude": {
+        "model": "opus",
+        "orcaModel": "claude-opus-5-5",
+        "effort": "medium",
+        "readOnly": true
+      },
+      "codex": {
+        "model": "gpt-6.2-sol",
+        "effort": "medium",
+        "enabled": true
+      }
+    },
+    "implementer": {
+      "description": "Executes exactly one plan step or one well-specified change within its allowed paths, then proves it with tests/commands. Use for implementation work once the change is specified. Defers to project domain agents/skills for stack expertise.",
+      "prefer": "codex",
+      "fallback": "claude",
+      "claude": {
+        "model": "sonnet",
+        "orcaModel": "claude-sonnet-5-5",
+        "effort": "high",
+        "readOnly": false
+      },
+      "codex": {
+        "model": "gpt-6.2-sol",
+        "effort": "medium",
+        "enabled": true
+      },
+      "highRisk": {
+        "codex": {
+          "model": "gpt-6.2-astra",
+          "effort": "high"
+        }
+      },
+      "watch": {
+        "_comment": "PR-owner watcher started by /ship-pr (ROLE: implementer, PR: own). Use instead of the implementer's codex settings.",
+        "codex": {
+          "model": "gpt-6.1-terra",
+          "effort": "medium"
+        }
+      }
+    },
+    "adversarial-reviewer": {
+      "description": "Adversarial reviewer. Use proactively after any non-trivial implementation and before a PR: tries to break the change (correctness, security, data/migration safety, missing tests) from the spec and diff alone. Returns CONFIRMED/PLAUSIBLE findings with repros. Never fixes.",
+      "prefer": "claude",
+      "fallback": "codex",
+      "crossVendor": true,
+      "claude": {
+        "model": "opus",
+        "orcaModel": "claude-opus-5-5",
+        "effort": "medium",
+        "readOnly": true
+      },
+      "codex": {
+        "model": "gpt-6.2-astra",
+        "effort": "medium",
+        "enabled": true
+      },
+      "highRisk": {
+        "claude": {
+          "model": "opus",
+          "orcaModel": "claude-opus-5-5",
+          "effort": "high"
+        },
+        "codex": {
+          "model": "gpt-6.2-astra",
+          "effort": "high"
+        }
+      }
+    },
+    "worker": {
+      "description": "Cheap mechanical worker. Use proactively for bulk, low-judgement tasks: sweeps and inventories, renames, lint/format fixes, applying an already-decided pattern across files, scraping logs, running tests and summarising output. Escalates any judgement call instead of deciding.",
+      "prefer": "codex",
+      "fallback": "claude",
+      "claude": {
+        "model": "haiku",
+        "orcaModel": "claude-haiku-5-5",
+        "readOnly": false
+      },
+      "codex": {
+        "model": "gpt-6-luna",
+        "effort": "low",
+        "enabled": true
+      }
+    },
+    "manual-tester": {
+      "description": "Hands-on tester. Use to verify a change the way a person would: drive a device, emulator, app window or browser, capture screenshots and command output, and report PASS/FAIL/BLOCKED per check with evidence. Never edits project files.",
+      "prefer": "codex",
+      "fallback": "claude",
+      "claude": {
+        "model": "sonnet",
+        "orcaModel": "claude-sonnet-5-5",
+        "effort": "medium",
+        "readOnly": true
+      },
+      "codex": {
+        "model": "gpt-6.1-terra",
+        "effort": "medium",
+        "enabled": true
+      }
+    }
+  }
+}

@@ -1,0 +1,155 @@
+#!/usr/bin/env python3
+"""Offline gh fixture for the watcher and classifier."""
+
+import json
+import os
+import sys
+from pathlib import Path
+
+HEAD = "a" * 40
+OLD_HEAD = "b" * 40
+REPO = "repos/example/demo"
+PR = f"{REPO}/pulls/7"
+COMMIT = f"{REPO}/commits/{HEAD}"
+CASE = os.environ["PR_FIXTURE"]
+BOT = "copilot-pull-request-reviewer[bot]"
+URL = "https://github.com/example/demo/pull/7"
+ARGS = sys.argv[1:]
+NO_REQUIRED = CASE.startswith("no-required")
+
+
+def emit(payload, code=0):
+    print(json.dumps(payload))
+    sys.exit(code)
+
+
+def check(name, conclusion, app=10):
+    return {
+        "name": name,
+        "head_sha": HEAD,
+        "status": "completed" if conclusion else "in_progress",
+        "conclusion": conclusion,
+        "app": {"id": app},
+    }
+
+
+if ARGS == ["pr", "view", "7", "-R", "example/demo", "--json", "number"]:
+    emit({"number": 7})
+if ARGS == ["pr", "checks", "7", "-R", "example/demo", "--json", "name,bucket,link,description"]:
+    bucket, code = {
+        "pending": ("pending", 8), "green": ("pass", 0), "failed": ("fail", 1)
+    }[CASE]
+    emit([{"name": "build", "bucket": bucket, "link": URL, "description": ""}], code)
+if ARGS == ["api", f"{REPO}/rules/branches/main", "--jq",
+            '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context']:
+    print("build")
+    sys.exit(0)
+if ARGS == ["api", f"{REPO}/branches/main/protection/required_status_checks",
+            "--jq", ".contexts[]?, .checks[]?.context"]:
+    print("gh: Branch not protected (HTTP 404)", file=sys.stderr)
+    sys.exit(1)
+
+if ARGS[:2] == ["api", "graphql"]:
+    assert ARGS[4:] == ["-f", "owner=example", "-f", "name=demo", "-F", "number=7"], ARGS
+    assert ARGS[2] == "-f" and ARGS[3].startswith("query="), ARGS
+    if "viewer" in ARGS[3]:
+        pr = {
+            "url": URL,
+            "state": {"closed": "CLOSED", "merged": "MERGED"}.get(CASE, "OPEN"),
+            "headRefOid": HEAD,
+            "baseRefName": "main",
+            "baseRef": None,
+            "mergeStateStatus": "CLEAN",
+            "author": {"login": "author"},
+            "comments": {"nodes": []},
+            "reviews": {"nodes": []},
+            "reviewThreads": {"nodes": []},
+        }
+        emit({"data": {"repository": {"pullRequest": pr}, "viewer": {"login": "owner"}}})
+    if CASE == "error":
+        emit({"errors": [{"message": "Fixture rate limit"}]})
+    assert "isInMergeQueue" in ARGS[3] and "mergeQueueEntry { id }" in ARGS[3], ARGS
+    graph = {
+        "isInMergeQueue": CASE == "queue-flag",
+        "mergeQueueEntry": {"id": "fixture-queue-entry"} if CASE == "queue-entry" else None,
+        "state": "OPEN",
+        "headRefOid": HEAD,
+        "baseRefName": "main",
+        "autoMergeRequest": {"enabledAt": "2026-11-19T09:00:00Z"} if CASE == "graph-auto" else None,
+        "mergeStateStatus": {
+            "behind": "BEHIND", "conflict": "DIRTY", "unknown": "UNKNOWN"
+        }.get(CASE, "CLEAN"),
+        "reviewThreads": {
+            "nodes": [{"isResolved": CASE != "thread"}],
+            "pageInfo": {"hasNextPage": CASE == "more-threads"},
+        },
+    }
+    emit({"data": {"repository": {"pullRequest": graph}}})
+
+if ARGS == ["api", PR]:
+    head = OLD_HEAD if CASE == "head" else HEAD
+    if CASE == "race":
+        marker = Path.home() / "head-observed"
+        head = OLD_HEAD if marker.exists() else HEAD
+        marker.touch()
+    pr = {
+        "head": {"sha": head},
+        "base": {"ref": "main", "sha": OLD_HEAD},
+        "state": "closed" if CASE in {"closed", "merged"} else "open",
+        "merged": CASE == "merged",
+        "draft": CASE == "draft",
+        "auto_merge": {"merge_method": "squash"} if CASE == "auto" else None,
+    }
+    emit(pr)
+if ARGS == ["api", f"{REPO}/branches/main"]:
+    if CASE == "rest-error":
+        print("gh: Fixture rate limit (HTTP 429)", file=sys.stderr)
+        sys.exit(1)
+    if NO_REQUIRED:
+        emit({"protection": {"enabled": False}})
+    emit({"protection": {"required_status_checks": {
+        "contexts": ["lint"],
+        "checks": [{"context": "lint", "app_id": -1}],
+    }}})
+if ARGS == ["api", f"{REPO}/rules/branches/main?per_page=100", "--paginate", "--slurp"]:
+    if NO_REQUIRED:
+        emit([[{"type": "merge_queue", "parameters": {"merge_method": "SQUASH"}}]])
+    emit([[
+        {"type": "merge_queue", "parameters": {"merge_method": "SQUASH"}},
+        {"type": "required_status_checks", "parameters": {
+            "required_status_checks": [{"context": "build", "integration_id": 10}],
+        }},
+    ]])
+if ARGS == ["api", f"{COMMIT}/check-runs?filter=latest&per_page=100", "--paginate", "--slurp"]:
+    conclusion = {"failed": "failure", "pending": None, "neutral": "neutral"}.get(CASE, "success")
+    if CASE == "no-required-empty":
+        emit([{"check_runs": []}])
+    if NO_REQUIRED:
+        conclusion = "failure" if CASE == "no-required-failed-run" else "skipped"
+        emit([{"check_runs": [check("build", "neutral"), check("test", conclusion)]}])
+    # With named requirements, omit the unrelated queue check and wrong app.
+    runs = [check("build", "success", app=999), check("merge queue", "failure")]
+    if CASE != "missing":
+        runs.append(check("build", conclusion))
+    emit([{"check_runs": runs[:2]}, {"check_runs": runs[2:]}])
+if ARGS == ["api", f"{COMMIT}/status?per_page=100", "--paginate", "--slurp"]:
+    if CASE == "no-required-empty":
+        emit([{"sha": HEAD, "statuses": []}])
+    state = {
+        "status-failed": "failure", "no-required-failed-status": "failure",
+        "no-required-pending-status": "pending",
+    }.get(CASE, "success")
+    emit([{"sha": HEAD, "statuses": [{"context": "lint", "state": state}]}])
+if ARGS == ["api", f"{PR}/reviews?per_page=100", "--paginate", "--slurp"]:
+    reviews = [
+        {"commit_id": HEAD, "state": "CHANGES_REQUESTED", "user": {"login": BOT, "type": "Bot"}},
+    ]
+    if CASE in {"changes", "old-changes", "approved-later", "commented-later"}:
+        requested_on = OLD_HEAD if CASE in {"old-changes", "approved-later"} else HEAD
+        reviews.append({"commit_id": requested_on, "state": "CHANGES_REQUESTED", "user": {"login": "reviewer"}})
+    if CASE in {"approved-later", "commented-later"}:
+        state = "APPROVED" if CASE == "approved-later" else "COMMENTED"
+        reviews.append({"commit_id": HEAD, "state": state, "user": {"login": "reviewer"}})
+    emit([reviews[:-1], reviews[-1:]])
+
+sys.exit(f"unexpected fake gh invocation: {ARGS!r}")

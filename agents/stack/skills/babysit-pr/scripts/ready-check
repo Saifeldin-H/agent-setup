@@ -1,0 +1,307 @@
+#!/usr/bin/env python3
+"""Classify one GitHub pull request against its expected head."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import subprocess
+import sys
+from collections import defaultdict
+from urllib.parse import quote
+
+SHA = re.compile(r"[0-9a-fA-F]{40}")
+REPO = re.compile(r"[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+")
+BOT_LOGINS = {
+    "copilot", "copilot-pull-request-reviewer", "github-copilot",
+    "greptile", "macroscope", "coderabbit", "coderabbitai",
+}
+RESULT_FIELDS = (
+    "class", "head", "state", "merged", "auto_merge", "checks", "merge_state",
+    "unresolved_threads", "changes_requested", "bot_review",
+)
+QUERY = """
+query($owner: String!, $name: String!, $number: Int!) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      state headRefOid baseRefName mergeStateStatus isInMergeQueue
+      mergeQueueEntry { id }
+      autoMergeRequest { enabledAt }
+      reviewThreads(first: 100) {
+        nodes { isResolved }
+        pageInfo { hasNextPage }
+      }
+    }
+  }
+}
+"""
+
+
+class ApiError(Exception):
+    pass
+
+
+class ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        result = dict.fromkeys(RESULT_FIELDS)
+        result["class"] = "BAD_INPUT"
+        print(json.dumps(result, separators=(",", ":")))
+        super().error(message)
+
+
+def api(endpoint, *flags):
+    try:
+        response = subprocess.run(
+            ["gh", "api", endpoint, *flags], capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ApiError(f"gh could not read {endpoint}: {type(error).__name__}") from error
+    if response.returncode:
+        http = re.search(r"HTTP \d{3}", response.stderr)
+        detail = http[0] if http else f"exit {response.returncode}"
+        raise ApiError(f"gh could not read {endpoint}: {detail}")
+    return json.loads(response.stdout)
+
+
+def pages(endpoint):
+    result = api(endpoint, "--paginate", "--slurp")
+    if not isinstance(result, list) or not result:
+        raise ApiError(f"no pages returned for {endpoint}")
+    return result
+
+
+def read_pr(endpoint, result, expected):
+    pr = api(endpoint)
+    head, state, merged, auto_merge = (
+        pr["head"]["sha"], pr["state"], pr["merged"], pr["auto_merge"]
+    )
+    if (
+        not SHA.fullmatch(head)
+        or state not in {"open", "closed"}
+        or type(merged) is not bool
+        or type(pr["draft"]) is not bool
+        or (auto_merge is not None and not isinstance(auto_merge, dict))
+    ):
+        raise ApiError("unexpected pull request metadata")
+    result.update(
+        head=head,
+        state="MERGED" if merged else state.upper(),
+        merged=merged,
+        auto_merge=auto_merge,
+    )
+    if merged:
+        return pr, "MERGED"
+    if state == "closed":
+        return pr, "CLOSED"
+    if head.lower() != expected:
+        return pr, "HEAD_CHANGED"
+    return pr, None
+
+
+def required_checks(repo, base):
+    branch = api(f"{repo}/branches/{base}")
+    classic = (branch["protection"].get("required_status_checks") or {})
+    classic_checks = {
+        (entry["context"], entry.get("app_id") or -1)
+        for entry in classic.get("checks", [])
+    }
+    classic_names = {name for name, _ in classic_checks}
+    required = classic_checks | {
+        (name, -1) for name in classic.get("contexts", []) if name not in classic_names
+    }
+    for page in pages(f"{repo}/rules/branches/{base}?per_page=100"):
+        for rule in page:
+            if rule["type"] == "required_status_checks":
+                required.update(
+                    (entry["context"], entry.get("integration_id") or -1)
+                    for entry in rule["parameters"]["required_status_checks"]
+                )
+    return required
+
+
+def check_runs(commit, head):
+    by_name = defaultdict(list)
+    for page in pages(f"{commit}/check-runs?filter=latest&per_page=100"):
+        for run in page["check_runs"]:
+            if run["head_sha"] != head:
+                raise ApiError("a check run belongs to a different head")
+            if run["status"] != "completed":
+                state = "pending"
+            elif run["conclusion"] in {"success", "neutral", "skipped"}:
+                state = "green"
+            else:
+                state = "failed"
+            app = run["app"]
+            by_name[run["name"]].append((app["id"] if app else None, state))
+    return by_name
+
+
+def commit_statuses(commit, head):
+    statuses = {}
+    state_map = {"success": "green", "pending": "pending", "error": "failed", "failure": "failed"}
+    for page in pages(f"{commit}/status?per_page=100"):
+        if page["sha"] != head:
+            raise ApiError("commit statuses belong to a different head")
+        for status in page["statuses"]:
+            statuses[status["context"]] = state_map[status["state"]]
+    return statuses
+
+
+def check_results(repo, base, head):
+    required = required_checks(repo, quote(base, safe=""))
+    commit = f"{repo}/commits/{head}"
+    runs = check_runs(commit, head)
+    statuses = commit_statuses(commit, head)
+    if not required:
+        # When branch policy names no checks, evaluate every reported check
+        # and status. A status and a check run can share the same name.
+        required = {(name, -1) for name in runs.keys() | statuses.keys()}
+    results = {}
+    for name, app_id in sorted(required):
+        observed = [state for app, state in runs[name] if app_id == -1 or app == app_id]
+        # REST commit statuses lack a source app ID. They prove only unpinned requirements.
+        if app_id == -1 and name in statuses:
+            observed.append(statuses[name])
+        key = name if app_id == -1 else f"{name} (app {app_id})"
+        if "failed" in observed:
+            results[key] = "failed"
+        elif not observed or "pending" in observed:
+            results[key] = "pending"
+        else:
+            results[key] = "green"
+    return results
+
+
+def review_results(pr_endpoint, head):
+    opinions = {}
+    bot_review = {}
+    for page in pages(f"{pr_endpoint}/reviews?per_page=100"):
+        for review in page:
+            state = review["state"]
+            user = review["user"] or {}
+            login = user.get("login", "(deleted)")
+            if user.get("type") == "Bot" or login.lower().removesuffix("[bot]") in BOT_LOGINS:
+                if review["commit_id"] == head and state != "PENDING":
+                    bot_review[login] = state
+            elif state in {"APPROVED", "CHANGES_REQUESTED"}:
+                # GitHub lists reviews in chronological order. Comments and
+                # dismissed reviews do not replace a submitted opinion.
+                author = login.lower() if user else object()
+                opinions[author] = (login, state)
+    changes_requested = {login for login, state in opinions.values() if state == "CHANGES_REQUESTED"}
+    return sorted(changes_requested), bot_review
+
+
+def review_threads(repo, number):
+    owner, name = repo.split("/")
+    data = api(
+        "graphql", "-f", f"query={QUERY}", "-f", f"owner={owner}",
+        "-f", f"name={name}", "-F", f"number={number}",
+    )
+    if data.get("errors"):
+        raise ApiError("GraphQL returned pull request errors")
+    return data["data"]["repository"]["pullRequest"]
+
+
+def classify(args, result):
+    repo = f"repos/{args.repo}"
+    endpoint = f"{repo}/pulls/{args.number}"
+    expected = args.expected_sha.lower()
+    pr, stopped = read_pr(endpoint, result, expected)
+    if stopped:
+        return stopped
+    if args.preflight:
+        return "OPEN"
+    if result["auto_merge"] is not None:
+        return "AUTO_MERGE_ON"
+
+    head = result["head"]
+    if pr["draft"]:
+        return "DRAFT"
+    checks = check_results(repo, pr["base"]["ref"], head)
+    changes_requested, bot_review = review_results(endpoint, head)
+    graph = review_threads(args.repo, args.number)
+    if graph["headRefOid"] != head or graph["state"] != result["state"]:
+        raise ApiError("pull request changed between reads")
+    if graph.get("isInMergeQueue") is True or graph.get("mergeQueueEntry") is not None:
+        return "IN_MERGE_QUEUE"
+    if graph["autoMergeRequest"] is not None:
+        result["auto_merge"] = graph["autoMergeRequest"]
+        return "AUTO_MERGE_ON"
+    result["merge_state"] = graph["mergeStateStatus"]
+    if result["merge_state"] == "DRAFT":
+        return "DRAFT"
+
+    current, stopped = read_pr(endpoint, result, expected)
+    if stopped:
+        return stopped
+    if result["auto_merge"] is not None:
+        return "AUTO_MERGE_ON"
+    if current["draft"]:
+        return "DRAFT"
+    if (
+        graph["baseRefName"] != current["base"]["ref"]
+        or current["base"]["ref"] != pr["base"]["ref"]
+        or current["base"]["sha"] != pr["base"]["sha"]
+    ):
+        raise ApiError("pull request changed between reads")
+
+    result.update(checks=checks, changes_requested=changes_requested, bot_review=bot_review)
+    threads = graph["reviewThreads"]
+    resolutions = [thread["isResolved"] for thread in threads["nodes"]]
+    has_more = threads["pageInfo"]["hasNextPage"]
+    if type(has_more) is not bool or any(type(resolved) is not bool for resolved in resolutions):
+        raise ApiError("unexpected review thread metadata")
+    unresolved = resolutions.count(False)
+    result["unresolved_threads"] = unresolved if not has_more else None
+
+    if result["merge_state"] == "BEHIND":
+        return "BEHIND"
+    if result["merge_state"] == "DIRTY":
+        return "CONFLICT"
+    if "failed" in result["checks"].values():
+        return "CHECK_FAILED"
+    if unresolved:
+        return "UNRESOLVED_THREADS"
+    if result["changes_requested"]:
+        return "CHANGES_REQUESTED"
+    if has_more:
+        raise ApiError("one GraphQL page could not establish that all threads are resolved")
+    if result["merge_state"] not in {"BLOCKED", "CLEAN", "HAS_HOOKS", "UNSTABLE"}:
+        raise ApiError("GitHub did not report a known merge state")
+    if not checks or "pending" in checks.values():
+        return "CHECK_PENDING"
+    return "READY"
+
+
+def main():
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument("repo", metavar="owner/repo")
+    parser.add_argument("number", type=int)
+    parser.add_argument("expected_sha")
+    parser.add_argument("--preflight", action="store_true")
+    args = parser.parse_args()
+    if (
+        not REPO.fullmatch(args.repo)
+        or any(part in {".", ".."} for part in args.repo.split("/"))
+        or not 0 < args.number <= 2_147_483_647
+        or not SHA.fullmatch(args.expected_sha)
+    ):
+        parser.error("expected owner/repo, a positive PR number, and a full commit SHA")
+
+    result = dict.fromkeys(RESULT_FIELDS)
+    try:
+        result["class"] = classify(args, result)
+    except ApiError as error:
+        print(f"ready-check: {error}", file=sys.stderr)
+        result["class"] = "API_ERROR"
+    except (AttributeError, KeyError, TypeError, ValueError):
+        print("ready-check: unexpected GitHub API response", file=sys.stderr)
+        result["class"] = "API_ERROR"
+    print(json.dumps(result, separators=(",", ":")))
+    return 0 if result["class"] in {"READY", "OPEN"} else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

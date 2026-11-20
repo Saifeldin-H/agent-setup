@@ -1,0 +1,257 @@
+#!/usr/bin/env python3
+"""Validate the installed stack and its operational Markdown."""
+
+import json
+import os
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+
+HOME = Path.home()
+ROOT = HOME / ".agents"
+STACK = ROOT / "stack"
+CLAUDE = HOME / ".claude"
+SKILL_DIRS = {"claude": CLAUDE / "skills", "codex": ROOT / "skills"}
+SKILLS = {
+    skill: {"claude": True, "codex": skill != "ship-pr"}
+    for skill in ("file-pr", "leaving-pr-comments", "babysit-pr", "ship-pr", "blast-radius", "ste")
+}
+PRINCIPLES = {
+    "Plan": (
+        "principle-foundational-thinking",
+        "principle-sequence-verifiable-units",
+        "principle-subtract-before-you-add",
+        "principle-laziness-protocol",
+        "principle-migrate-callers-then-delete-legacy-apis",
+        "principle-make-operations-idempotent",
+        "principle-separate-before-serializing-shared-state",
+    ),
+    "Build": (
+        "principle-prove-it-works",
+        "principle-fix-root-causes",
+        "principle-test-behavior-not-implementation",
+        "principle-boundary-discipline",
+        "principle-type-system-discipline",
+        "tdd",
+    ),
+    "Review": (
+        "principle-attack-the-premise",
+        "principle-minimize-reader-load",
+        "principle-explain-the-number",
+        "principle-test-behavior-not-implementation",
+    ),
+}
+DOCUMENT_TOKENS = {"principles.md", "## Plan", "## Build", "## Review"}
+BABYSIT_SCRIPTS = {"scripts/pr-wait", "scripts/ready-check"}
+FORBIDDEN = re.compile(
+    r"gh\s+pr\s+merge|--auto\b|--admin\b|\bdelegate_task\b|\bwatch_pull_request\b|"
+    r"\borchestrator_capabilities\b|\bTask\s+tool\b|"
+    r"/pulls/[^/\s]+/merge\b|"
+    r"\b(?:enablePullRequestAutoMerge|enqueuePullRequest|mergePullRequest)\b"
+)
+MARKDOWN_PREFIX = re.compile(r"^(?:\s+|>+|(?:[-+*]|\d+[.)])\s+|[*_]+)*")
+PROHIBITION = re.compile(r"^(?:Never|Do not)\b")
+PROHIBITION_CLAUSE = re.compile(r"[:;]|\sif\s", re.IGNORECASE)
+HEADING = re.compile(r"^(#{2,3})[ \t]+(.+?)[ \t]*#*[ \t]*$", re.MULTILINE)
+
+
+def is_prohibition(line: str) -> bool:
+    text = MARKDOWN_PREFIX.sub("", line).replace("*", "").replace("_", "")
+    match = PROHIBITION.match(text)
+    return match is not None and PROHIBITION_CLAUSE.search(text[match.end():]) is None
+
+
+def frontmatter(body: str) -> dict:
+    lines = body.splitlines()
+    if not lines or lines[0] != "---" or "---" not in lines[1:]:
+        raise ValueError("missing frontmatter delimiters")
+    # macOS Ruby ships with Psych. Use its safe YAML loader.
+    result = subprocess.run(
+        ["ruby", "-ryaml", "-rjson", "-e", "puts JSON.generate(YAML.safe_load(STDIN.read))"],
+        input="\n".join(lines[1:lines.index("---", 1)]),
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode:
+        raise ValueError("malformed YAML frontmatter")
+    metadata = json.loads(result.stdout)
+    if not isinstance(metadata, dict):
+        raise ValueError("frontmatter must be a mapping")
+    return metadata
+
+
+def check_skill(path: Path, body: str) -> None:
+    skill = path.parent.name
+    metadata = frontmatter(body)
+    if metadata.get("name") != skill:
+        raise ValueError(f"name must be {skill}")
+    description = metadata.get("description")
+    if not isinstance(description, str) or not description.strip():
+        raise ValueError("description must be a non-empty string")
+    if skill == "ship-pr" and metadata.get("disable-model-invocation") is not True:
+        raise ValueError("ship-pr requires disable-model-invocation: true")
+    if skill == "blast-radius" and "disable-model-invocation" in metadata:
+        raise ValueError("blast-radius must omit disable-model-invocation")
+
+
+def has_guidance(entry: str, citation: str) -> bool:
+    path = re.escape(citation)
+    citation_markup = rf"\[[^\]\n]*\]\([^()\n]*{path}\)|`[^`\n]*{path}`|[^\s()<>]*{path}"
+    guidance = re.sub(citation_markup, "", entry)
+    guidance = re.sub(r"(?im)^[ \t]*(?:source|upstream|see|reference)\b[ \t:.]*$", "", guidance)
+    return re.search(r"\w", guidance) is not None
+
+
+def check_principles(body: str) -> list[str]:
+    errors = []
+    sections = {}
+    entries = None
+    headings = list(HEADING.finditer(body))
+    for index, heading in enumerate(headings):
+        level, name = heading.groups()
+        if level == "##":
+            if name in sections:
+                errors.append(f"duplicate section {name}")
+            entries = sections[name] = []
+            continue
+        if entries is None:
+            errors.append(f"entry before a section: {name}")
+            continue
+        entries.append(name)
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(body)
+        entry = body[heading.end():end].strip()
+        citation = f"pstack/skills/{name}/SKILL.md"
+        if citation not in entry:
+            errors.append(f"{name} must cite {citation}")
+        elif not has_guidance(entry, citation):
+            errors.append(f"{name} has no guidance")
+    if sections.keys() != PRINCIPLES.keys():
+        errors.append("expected exactly the Plan, Build, and Review sections")
+    for section, expected in PRINCIPLES.items():
+        if sorted(sections.get(section, [])) != sorted(expected):
+            errors.append(f"{section} must contain exactly: {', '.join(expected)}")
+    return errors
+
+
+def reference_path(name: str) -> Path:
+    if name.startswith("~/"):
+        return HOME / name[2:]
+    if name.startswith("skills/"):
+        return STACK / name
+    return ROOT / name
+
+
+def token_present(body: str, token: str) -> bool:
+    return re.search(rf"(?<![\w-]){re.escape(token)}(?![\w-])", body) is not None
+
+
+def check_manifest(manifest: dict, documents: dict[Path, str]) -> list[str]:
+    errors = []
+    skills = manifest["skills"]
+    if skills != SKILLS or any(
+        type(flag) is not bool for flags in skills.values() for flag in flags.values()
+    ):
+        errors.append("manifest vendor flags must match the six stack skills")
+
+    for skill, flags in SKILLS.items():
+        target = STACK / "skills" / skill
+        for vendor, enabled in flags.items():
+            dest = SKILL_DIRS[vendor] / skill
+            if not enabled and dest.is_symlink() and dest.resolve() == target.resolve():
+                errors.append(f"DISABLED-LINK {dest} -> {target}")
+
+    requires = manifest["requires"]
+    if not isinstance(requires, dict) or not requires:
+        return errors + ["manifest requires must be a non-empty object"]
+    for name, tokens in requires.items():
+        path = reference_path(name)
+        if path not in documents:
+            errors.append(f"{name}: required document is missing or outside the scan")
+            continue
+        if not isinstance(tokens, list) or not tokens or any(
+            not isinstance(token, str) or not token.strip() for token in tokens
+        ):
+            errors.append(f"{name}: expected a non-empty list of reference tokens")
+            continue
+        for token in tokens:
+            if not token_present(documents[path], token):
+                errors.append(f"{name}: missing required reference {token}")
+            if token in DOCUMENT_TOKENS:
+                continue
+            if token in BABYSIT_SCRIPTS:
+                if not (path.parent / token).is_file():
+                    errors.append(f"{name}: missing referenced script {token}")
+                continue
+            skill = token.removeprefix("/")
+            if skill not in SKILLS:
+                errors.append(f"{name}: nonexistent skill token {token}")
+                continue
+            target = STACK / "skills" / skill
+            for vendor, enabled in SKILLS[skill].items():
+                dest = SKILL_DIRS[vendor] / skill
+                if enabled and (not dest.is_symlink() or dest.resolve() != target.resolve()
+                                or not (dest / "SKILL.md").is_file()):
+                    errors.append(f"{name}: {token} is not installed for {vendor}")
+    return errors
+
+
+def check_stack() -> list[str]:
+    errors = []
+    skill_files = set((STACK / "skills").glob("*/SKILL.md"))
+    skill_files.update(STACK / "skills" / skill / "SKILL.md" for skill in SKILLS)
+    principles = STACK / "principles.md"
+    paths = skill_files | set((ROOT / "roles").glob("*.md")) | {
+        principles,
+        ROOT / "common.md",
+        CLAUDE / "CLAUDE.md",
+        CLAUDE / "skills/pr-review-master/SKILL.md",
+    }
+    documents = {}
+    for path in sorted(paths):
+        try:
+            body = documents[path] = path.read_text()
+            if path in skill_files:
+                check_skill(path, body)
+        except (OSError, ValueError) as error:
+            errors.append(f"{path}: {error}")
+        for number, line in enumerate(documents.get(path, "").splitlines(), 1):
+            if FORBIDDEN.search(line.replace("`", "")) and not is_prohibition(line):
+                errors.append(f"{path}:{number}: forbidden token outside a prohibition")
+
+    if principles in documents:
+        errors.extend(f"{principles}: {error}" for error in check_principles(documents[principles]))
+    manifest_path = STACK / "stack.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        errors.extend(check_manifest(manifest, documents))
+    except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+        errors.append(f"{manifest_path}: {error}")
+
+    scripts = STACK / "skills/babysit-pr/scripts"
+    for name in ("pr-wait", "ready-check"):
+        script = scripts / name
+        if not script.is_file() or not os.access(script, os.X_OK):
+            errors.append(f"{script}: expected an executable file")
+    try:
+        upstream = STACK / "upstream/tstack/skills/babysit-pr/scripts/pr-wait"
+        if (scripts / "pr-wait").read_bytes() != upstream.read_bytes():
+            errors.append("pr-wait differs from the pinned upstream file")
+    except OSError as error:
+        errors.append(str(error))
+    return errors
+
+
+def main() -> int:
+    errors = check_stack()
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("Stack checks passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
