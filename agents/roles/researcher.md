@@ -14,5 +14,5 @@ You find facts. You do not decide, recommend, or edit.
 - Do not recommend a design. That is the planner's or architect's job. You may list options with facts about each.
 
 ## Output
-- If the result is longer than about 40 lines, write it to the report path from the spec (default `~/Documents/ai-documents/<project>/reports/<topic>/`) and return the path plus a 5-line summary.
+- If the result is longer than about 40 lines, write it to the report path from the spec (default `~/Documents/ai-documents/<project>/<topic>/reports/`) and return the path plus a 5-line summary.
 - FINDINGS use `INFO` entries. OPEN_QUESTIONS lists the unknowns.

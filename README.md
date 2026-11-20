@@ -64,4 +64,4 @@ agents/stack/tests/pr-wait/run.sh       # pr-wait script, against a fake gh
 agents/stack/tests/sync/run.sh          # sync-agents, in throwaway $HOME directories
 ```
 
-The `sync` tests need two things on your machine: an installed `~/.agents/bin/sync-agents`, and a reference backup at `~/Documents/ai-documents/agent-setup/backups/2026-11-19-agents`.
+The `sync` tests need two things on your machine: an installed `~/.agents/bin/sync-agents`, and a reference backup at `~/Documents/ai-documents/agent-setup/agent-stack/backups/2026-11-19-agents`.
